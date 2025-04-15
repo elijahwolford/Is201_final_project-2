@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Block Blast</title>
+    <style>
+        /* --- Basic Setup & Theme --- */
+        :root {
+            --bg-color: #013220; /* Dark Green */
+            --grid-bg: #024b30;
+            --grid-line: #035f3d;
+            --cell-empty-bg: #0a7e51;
+            --text-color: #e0ffe0;
+            --border-color: #90ee90; /* Light Green */
+            --score-color: #ffffa0; /* Light Yellow */
+            --block-preview-bg: #024b30;
+
+            /* Block Colors - Choose contrasting, nice colors */
+            --color-1: #FF6B6B; /* Red */
+            --color-2: #4ECDC4; /* Teal */
+            --color-3: #45B7D1; /* Blue */
+            --color-4: #FED766; /* Yellow */
+            --color-5: #FFA07A; /* Light Salmon/Orange */
+            --color-6: #9B59B6; /* Purple */
+            --color-7: #2ECC71; /* Emerald Green (different from BG) */
+            --color-8: #F39C12; /* Orange */
+            --color-9: #e74c3c; /* Darker Red */
+            --color-10: #3498DB; /* Bright Blue */
+
+            --cell-size: 30px; /* Adjust grid cell size */
+            --grid-size: 10; /* Grid dimensions (10x10) */
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Align to top */
+            min-height: 100vh;
+            margin: 0;
+            padding-top: 20px;
+            user-select: none; /* Prevent text selection during drag */
+            overflow-x: hidden; /* Prevent horizontal scroll */
+        }
+
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        #game-info {
+            display: flex;
+            justify-content: space-around;
+            width: calc(var(--cell-size) * var(--grid-size) + 2px); /* Match grid width */
+            background-color: var(--grid-bg);
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        #game-info span {
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        #score, #level {
+             color: var(--score-color);
+        }
+
+        /* --- Game Grid --- */
+        #game-grid {
+            display: grid;
+            grid-template-columns: repeat(var(--grid-size), var(--cell-size));
+            grid-template-rows: repeat(var(--grid-size), var(--cell-size));
+            width: calc(var(--cell-size) * var(--grid-size));
+            height: calc(var(--cell-size) * var(--grid-size));
+            background-color: var(--grid-bg);
+            border: 1px solid var(--border-color);
+            position: relative; /* Needed for ghost preview */
+             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .grid-cell {
+            width: var(--cell-size);
+            height: var(--cell-size);
+            background-color: var(--cell-empty-bg);
+            border: 1px solid var(--grid-line);
+            box-sizing: border-box; /* Include border in size */
+            transition: background-color 0.1s ease; /* Smooth color change */
+        }
+
+        /* --- Block Styling --- */
+        .block-cell { /* Style for cells occupied by a block */
+            border: 1px outset rgba(255, 255, 255, 0.3);
+             box-shadow: inset 0 0 3px rgba(0,0,0,0.4);
+        }
+        .ghost-cell { /* Style for previewing placement */
+             background-color: rgba(255, 255, 255, 0.2) !important;
+             border: 1px dashed rgba(255, 255, 255, 0.5);
+        }
+
+
+        /* --- Block Selection Area --- */
+        #block-selection {
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-start; /* Align tops */
+            width: calc(var(--cell-size) * var(--grid-size) + 2px); /* Match grid width */
+            min-height: calc(var(--cell-size) * 4 + 20px); /* Approx height for 4-unit blocks */
+            padding: 10px;
+            background-color: var(--grid-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .piece-container {
+            display: flex;
+            flex-direction: column; /* Center piece vertically */
+            align-items: center; /* Center piece horizontally */
+            cursor: grab;
+            padding: 5px;
+            border-radius: 5px;
+            transition: background-color 0.2s ease;
+        }
+
+        .piece-container.selected {
+             background-color: rgba(255, 255, 255, 0.2);
+             cursor: grabbing;
+        }
+
+        .piece-preview {
+            display: grid;
+             /* Grid setup dynamically in JS */
+            gap: 1px;
+        }
+
+        .preview-cell {
+            width: calc(var(--cell-size) * 0.5); /* Smaller preview cells */
+            height: calc(var(--cell-size) * 0.5);
+            background-color: var(--cell-empty-bg); /* Use empty color for spacing */
+            border: 1px solid var(--grid-line);
+             box-sizing: border-box;
+        }
+        .preview-cell.filled {
+             border: 1px outset rgba(255, 255, 255, 0.3);
+             box-shadow: inset 0 0 2px rgba(0,0,0,0.4);
+        }
+
+
+         /* --- Draggable Piece (follows cursor) --- */
+        #draggable-piece {
+            position: absolute;
+            display: grid;
+            gap: 1px;
+            pointer-events: none; /* Don't interfere with mouse events */
+            z-index: 1000;
+            opacity: 0.8; /* Slightly transparent */
+            transform: translate(-50%, -50%); /* Center on cursor */
+        }
+
+        .draggable-cell {
+            width: var(--cell-size); /* Match grid cell size */
+            height: var(--cell-size);
+            border: 1px outset rgba(255, 255, 255, 0.3);
+            box-shadow: inset 0 0 3px rgba(0,0,0,0.4);
+             box-sizing: border-box;
+        }
+
+        /* --- Messages --- */
+        #message-area {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 20px 40px;
+            border-radius: 10px;
+            font-size: 1.8em;
+            text-align: center;
+            z-index: 100;
+            display: none; /* Hidden by default */
+             border: 2px solid var(--border-color);
+        }
+         #message-area button {
+             display: block;
+             margin: 15px auto 0;
+             padding: 10px 20px;
+             font-size: 0.7em;
+             cursor: pointer;
+             background-color: var(--border-color);
+             color: var(--bg-color);
+             border: none;
+             border-radius: 5px;
+              font-weight: bold;
+         }
+
+        /* --- Block Colors --- */
+        .color-1 { background-color: var(--color-1); }
+        .color-2 { background-color: var(--color-2); }
+        .color-3 { background-color: var(--color-3); }
+        .color-4 { background-color: var(--color-4); }
+        .color-5 { background-color: var(--color-5); }
+        .color-6 { background-color: var(--color-6); }
+        .color-7 { background-color: var(--color-7); }
+        .color-8 { background-color: var(--color-8); }
+        .color-9 { background-color: var(--color-9); }
+        .color-10 { background-color: var(--color-10); }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="game-info">
+            <span>Level: <span id="level">1</span></span>
+            <span>Score: <span id="score">0</span></span>
+        </div>
+        <div id="game-grid">
+            </div>
+        <div id="block-selection">
+            </div>
+    </div>
+
+    <div id="draggable-piece" style="display: none;"></div>
+
+    <div id="message-area">
+        <span id="message-text">Game Over!</span>
+        <button id="restart-button">Play Again</button>
+    </div>
+
+    <script>
+        // --- Game Constants and Variables ---
+        const GRID_SIZE = 10;
+        const gridElement = document.getElementById('game-grid');
+        const selectionElement = document.getElementById('block-selection');
+        const scoreElement = document.getElementById('score');
+        const levelElement = document.getElementById('level');
+        const messageArea = document.getElementById('message-area');
+        const messageText = document.getElementById('message-text');
+        const restartButton = document.getElementById('restart-button');
+        const draggablePieceElement = document.getElementById('draggable-piece');
+
+        let grid = []; // 2D array representing the grid state (0 = empty, 'color-X' = filled)
+        let score = 0;
+        let level = 1;
+        let currentLevelScoreGoal = 1000; // Initial goal for level 1
+        let availablePieces = [null, null, null]; // Holds the 3 currently available piece definitions
+        let selectedPieceIndex = -1; // Index of the piece selected from availablePieces
+        let selectedPieceData = null; // The data of the selected piece (shape, color, etc.)
+        let isDragging = false;
+        let dragOffsetX = 0; // Offset X from cursor to top-left of dragged element
+        let dragOffsetY = 0; // Offset Y from cursor to top-left of dragged element
+        let gameOver = false;
+        let currentGhostCells = []; // Array to store DOM elements currently showing ghost preview
+
+        // --- Block Definitions --- (Keep the PIECES array exactly as it was before)
+        const PIECES = [
+            // 1x1
+            { id: 0, shape: [[0, 0]], color: 'color-1', width: 1, height: 1 },
+            // 1x2
+            { id: 1, shape: [[0, 0], [1, 0]], color: 'color-2', width: 1, height: 2 },
+            // 2x1
+            { id: 2, shape: [[0, 0], [0, 1]], color: 'color-2', width: 2, height: 1 },
+            // 1x3
+            { id: 3, shape: [[0, 0], [1, 0], [2, 0]], color: 'color-3', width: 1, height: 3 },
+            // 3x1
+            { id: 4, shape: [[0, 0], [0, 1], [0, 2]], color: 'color-3', width: 3, height: 1 },
+            // 2x2 Square
+            { id: 5, shape: [[0, 0], [0, 1], [1, 0], [1, 1]], color: 'color-4', width: 2, height: 2 },
+            // L-shapes (4 variations)
+            { id: 6, shape: [[0, 0], [1, 0], [2, 0], [2, 1]], color: 'color-5', width: 2, height: 3 },
+            { id: 7, shape: [[0, 1], [1, 1], [2, 1], [2, 0]], color: 'color-5', width: 2, height: 3 },
+            { id: 8, shape: [[0, 0], [0, 1], [1, 1], [2, 1]], color: 'color-5', width: 2, height: 3 },
+            { id: 9, shape: [[0, 0], [1, 0], [2, 0], [0, 1]], color: 'color-5', width: 2, height: 3 },
+             // T-shapes (4 variations)
+            { id: 10, shape: [[0, 0], [1, 0], [2, 0], [1, 1]], color: 'color-6', width: 2, height: 3 }, // May need width/height adjustment depending on anchor
+            { id: 11, shape: [[1, 0], [0, 1], [1, 1], [2, 1]], color: 'color-6', width: 3, height: 2 },
+            { id: 12, shape: [[1, 0], [0, 1], [1, 1], [1, 2]], color: 'color-6', width: 2, height: 3 },
+            { id: 13, shape: [[0, 1], [1, 1], [2, 1], [1, 0]], color: 'color-6', width: 3, height: 2 }, // Standard T
+            // S-shapes (2 variations)
+            { id: 14, shape: [[1, 0], [2, 0], [0, 1], [1, 1]], color: 'color-7', width: 3, height: 2 }, // Standard S
+            { id: 15, shape: [[0, 0], [1, 0], [1, 1], [2, 1]], color: 'color-7', width: 2, height: 3 }, // S rotated
+             // Z-shapes (2 variations)
+             { id: 16, shape: [[0, 0], [1, 0], [1, 1], [2, 1]], color: 'color-8', width: 3, height: 2 }, // Standard Z (same as one S?)
+             { id: 17, shape: [[1, 0], [0, 1], [1, 1], [0, 2]], color: 'color-8', width: 2, height: 3 }, // Z rotated
+             // 1x4 Line
+             { id: 18, shape: [[0, 0], [1, 0], [2, 0], [3, 0]], color: 'color-9', width: 1, height: 4 },
+             // 4x1 Line
+             { id: 19, shape: [[0, 0], [0, 1], [0, 2], [0, 3]], color: 'color-9', width: 4, height: 1 },
+             // 1x5 Line
+             { id: 20, shape: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]], color: 'color-10', width: 1, height: 5 },
+             // 5x1 Line
+             { id: 21, shape: [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]], color: 'color-10', width: 5, height: 1 },
+              // 3x3 Square - Large piece
+             { id: 22, shape: [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]], color: 'color-4', width: 3, height: 3 },
+             // Corner Pieces (2x2)
+             { id: 23, shape: [[0,0], [1,0], [0,1]], color: 'color-2', width: 2, height: 2},
+             { id: 24, shape: [[0,0], [1,0], [1,1]], color: 'color-2', width: 2, height: 2}, // Top-right L
+             { id: 25, shape: [[1,0], [1,1], [0,1]], color: 'color-2', width: 2, height: 2}, // Bottom-right L
+             { id: 26, shape: [[0,0], [0,1], [1,1]], color: 'color-2', width: 2, height: 2}, // Bottom-left L
+        ];
+
+
+        // --- Initialization ---
+        function initGame() {
+            score = 0;
+            level = 1;
+            currentLevelScoreGoal = calculateLevelGoal(level);
+            gameOver = false;
+            isDragging = false;
+            selectedPieceIndex = -1;
+            selectedPieceData = null;
+            currentGhostCells = []; // Reset ghost cells
+
+            updateScoreDisplay();
+            updateLevelDisplay();
+            createGrid(); // Creates grid cells and adds listeners
+            generateNewPieces();
+            renderAvailablePieces();
+            hideMessage();
+            draggablePieceElement.style.display = 'none';
+            checkGameOver(); // Check if initial pieces can be placed
+        }
+
+        function calculateLevelGoal(currentLevel) {
+            // Exponentially increasing goal, adjust base and multiplier as needed
+            return Math.floor(500 * Math.pow(1.8, currentLevel));
+        }
+
+        function createGrid() {
+            gridElement.innerHTML = ''; // Clear previous grid
+            grid = [];
+            for (let r = 0; r < GRID_SIZE; r++) {
+                grid[r] = [];
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    grid[r][c] = 0; // 0 represents an empty cell
+                    const cell = document.createElement('div');
+                    cell.classList.add('grid-cell');
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+
+                    // Add listeners directly to grid cells for mouseover during drag
+                    cell.addEventListener('mouseenter', handleGridMouseEnter);
+                    cell.addEventListener('mouseleave', handleGridMouseLeave); // Optional: clear ghost immediately if mouse leaves grid
+
+                    gridElement.appendChild(cell);
+                }
+            }
+            // Add mouseup listener to the whole grid container for dropping
+            gridElement.addEventListener('mouseup', handleGridMouseUp);
+             // Add listener to document to catch mouseup outside grid (cancel drag)
+             document.addEventListener('mouseup', handleDocumentMouseUp);
+
+        }
+
+        // --- Piece Generation and Display --- (Keep getRandomPiece, generateNewPieces, createPiecePreview as before)
+        function getRandomPiece() {
+            const randomIndex = Math.floor(Math.random() * PIECES.length);
+            // Return a deep copy to avoid modification issues
+            return JSON.parse(JSON.stringify(PIECES[randomIndex]));
+        }
+
+        function generateNewPieces() {
+            for (let i = 0; i < 3; i++) {
+                if (availablePieces[i] === null) { // Only replace used pieces
+                    availablePieces[i] = getRandomPiece();
+                }
+            }
+             // If all slots were null (start of game or after using all 3), render
+             if (availablePieces.every(p => p !== null)) {
+                 renderAvailablePieces();
+             }
+        }
+
+        function renderAvailablePieces() {
+            selectionElement.innerHTML = ''; // Clear old pieces
+            availablePieces.forEach((piece, index) => {
+                if (piece) {
+                    const container = document.createElement('div');
+                    container.classList.add('piece-container');
+                    container.dataset.index = index;
+
+                    const previewGrid = createPiecePreview(piece);
+                    container.appendChild(previewGrid);
+
+                    // --- Drag Start Event Listener --- Changed to mousedown
+                    container.addEventListener('mousedown', startDragPiece);
+                    // Prevent browser's default drag behavior which can interfere
+                    container.addEventListener('dragstart', (e) => e.preventDefault());
+
+                    selectionElement.appendChild(container);
+                } else {
+                    // Add an empty placeholder if a piece slot is null
+                     const placeholder = document.createElement('div');
+                     placeholder.classList.add('piece-container');
+                     placeholder.style.minWidth = '80px'; // Ensure spacing
+                     placeholder.style.height = '80px'; // Ensure spacing
+                     placeholder.style.visibility = 'hidden';
+                     selectionElement.appendChild(placeholder);
+                }
+            });
+        }
+
+        function createPiecePreview(piece) {
+            const previewElement = document.createElement('div');
+            previewElement.classList.add('piece-preview');
+
+             // Determine bounds for grid size
+             let minR = 0, maxR = 0, minC = 0, maxC = 0;
+             piece.shape.forEach(([r, c]) => {
+                 minR = Math.min(minR, r);
+                 maxR = Math.max(maxR, r);
+                 minC = Math.min(minC, c);
+                 maxC = Math.max(maxC, c);
+             });
+             const rows = maxR - minR + 1;
+             const cols = maxC - minC + 1;
+
+            previewElement.style.gridTemplateRows = `repeat(${rows}, calc(var(--cell-size) * 0.5))`;
+            previewElement.style.gridTemplateColumns = `repeat(${cols}, calc(var(--cell-size) * 0.5))`;
+
+             // Create cells for the preview grid
+             const previewCells = Array(rows).fill(null).map(() => Array(cols).fill(null));
+
+            piece.shape.forEach(([r, c]) => {
+                // Adjust coordinates relative to the top-left of the piece's bounding box
+                const relativeR = r - minR;
+                const relativeC = c - minC;
+                if (relativeR >= 0 && relativeR < rows && relativeC >= 0 && relativeC < cols) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('preview-cell', 'filled', piece.color);
+                    previewCells[relativeR][relativeC] = cell;
+                 }
+            });
+
+             // Append cells in correct order
+            for (let r = 0; r < rows; r++) {
+                 for (let c = 0; c < cols; c++) {
+                     if (previewCells[r][c]) {
+                         previewElement.appendChild(previewCells[r][c]);
+                     } else {
+                         // Add an empty spacer cell if needed
+                         const emptyCell = document.createElement('div');
+                         emptyCell.classList.add('preview-cell');
+                         previewElement.appendChild(emptyCell);
+                     }
+                 }
+             }
+            return previewElement;
+        }
+
+
+        // --- Drag and Drop Logic ---
+
+        function startDragPiece(event) {
+            if (gameOver || event.button !== 0) return; // Only main mouse button
+            const targetContainer = event.currentTarget;
+            selectedPieceIndex = parseInt(targetContainer.dataset.index);
+            selectedPieceData = availablePieces[selectedPieceIndex];
+
+            if (!selectedPieceData) return; // Piece already used
+
+            isDragging = true;
+            targetContainer.classList.add('selected');
+            targetContainer.style.cursor = 'grabbing'; // Change cursor
+
+            // Create and show the visual draggable element
+            createDraggableElement(selectedPieceData);
+
+            // --- Calculate Offset ---
+            // Get the position of the click relative to the viewport
+            const clickX = event.clientX;
+            const clickY = event.clientY;
+
+            // Temporarily position the draggable element off-screen to measure it
+            draggablePieceElement.style.visibility = 'hidden';
+            draggablePieceElement.style.display = 'grid'; // Make it display to get dimensions
+            draggablePieceElement.style.left = '-9999px';
+            draggablePieceElement.style.top = '-9999px';
+
+            // Estimate the center of the draggable piece (can be refined)
+            const dragRect = draggablePieceElement.getBoundingClientRect();
+            const pieceVisualCenterX = dragRect.width / 2;
+            const pieceVisualCenterY = dragRect.height / 2;
+
+            // Calculate offset from the click point to the piece's visual center
+            // dragOffsetX = clickX - (draggablePieceElement.offsetLeft + pieceVisualCenterX);
+            // dragOffsetY = clickY - (draggablePieceElement.offsetTop + pieceVisualCenterY);
+            // Simpler: Offset from click to the desired top-left corner of the drag element
+            // Let's try centering it on the cursor again, but ensure transform is removed
+             dragOffsetX = pieceVisualCenterX;
+             dragOffsetY = pieceVisualCenterY;
+
+
+            // Position initially and make visible
+            draggablePieceElement.style.visibility = 'visible';
+            moveDraggableElement(event.clientX, event.clientY); // Position initially
+
+            // Add listeners to the document to track mouse movements everywhere
+            document.addEventListener('mousemove', dragPiece);
+            // Mouseup listeners are now on gridElement and document
+        }
+
+        function createDraggableElement(piece) {
+            draggablePieceElement.innerHTML = ''; // Clear previous content
+
+             // Determine bounds for grid size (similar to preview)
+             let minR = 0, maxR = 0, minC = 0, maxC = 0;
+             piece.shape.forEach(([r, c]) => {
+                 minR = Math.min(minR, r);
+                 maxR = Math.max(maxR, r);
+                 minC = Math.min(minC, c);
+                 maxC = Math.max(maxC, c);
+             });
+             const rows = maxR - minR + 1;
+             const cols = maxC - minC + 1;
+
+            draggablePieceElement.style.gridTemplateRows = `repeat(${rows}, var(--cell-size))`;
+            draggablePieceElement.style.gridTemplateColumns = `repeat(${cols}, var(--cell-size))`;
+             // Remove the transform centering if we calculate offset manually
+             draggablePieceElement.style.transform = 'none';
+
+            const draggableCells = Array(rows).fill(null).map(() => Array(cols).fill(null));
+
+             // Create cells based on the shape
+             piece.shape.forEach(([r, c]) => {
+                 const relativeR = r - minR;
+                 const relativeC = c - minC;
+                 if (relativeR >= 0 && relativeR < rows && relativeC >= 0 && relativeC < cols) {
+                     const cell = document.createElement('div');
+                     cell.classList.add('draggable-cell', piece.color);
+                     draggableCells[relativeR][relativeC] = cell;
+                 }
+             });
+
+             // Append cells in order
+             for (let r = 0; r < rows; r++) {
+                 for (let c = 0; c < cols; c++) {
+                      if (draggableCells[r][c]) {
+                          draggablePieceElement.appendChild(draggableCells[r][c]);
+                      } else {
+                           // Add an empty div to maintain grid structure if shape is irregular
+                           const emptySpacer = document.createElement('div');
+                           emptySpacer.style.visibility = 'hidden'; // Takes space but not visible
+                           emptySpacer.style.width = 'var(--cell-size)';
+                           emptySpacer.style.height = 'var(--cell-size)';
+                           draggablePieceElement.appendChild(emptySpacer);
+                      }
+                 }
+             }
+
+            // NOTE: display is set in startDragPiece after offset calculation
+        }
+
+        function moveDraggableElement(x, y) {
+            if (!isDragging || !draggablePieceElement) return;
+            // Apply offset so the cursor aligns with the calculated offset point
+            draggablePieceElement.style.left = `${x - dragOffsetX}px`;
+            draggablePieceElement.style.top = `${y - dragOffsetY}px`;
+        }
+
+        // Called during mousemove *over the document*
+        function dragPiece(event) {
+             if (!isDragging || gameOver) return;
+             moveDraggableElement(event.clientX, event.clientY);
+             // Ghost preview logic is now handled by grid cell mouseenter events
+        }
+
+        // --- Grid Interaction Handlers ---
+
+        // Called when mouse enters a grid cell WHILE dragging
+        function handleGridMouseEnter(event) {
+            if (!isDragging || !selectedPieceData) return;
+
+            const cell = event.target;
+            const targetRow = parseInt(cell.dataset.row);
+            const targetCol = parseInt(cell.dataset.col);
+
+            clearGhostPreview(); // Clear previous ghost before showing new one
+
+            if (canPlacePiece(selectedPieceData, targetRow, targetCol)) {
+                showGhostPreview(selectedPieceData, targetRow, targetCol);
+            }
+        }
+
+        // Called when mouse leaves a grid cell WHILE dragging (Optional)
+        function handleGridMouseLeave(event) {
+             // Can potentially clear ghost here if mouse leaves the grid entirely,
+             // but clearGhostPreview() in handleGridMouseEnter handles moving between cells.
+             // We need a way to detect leaving the grid container itself.
+        }
+
+        // Called when mouseup happens *over the grid*
+        function handleGridMouseUp(event) {
+            if (!isDragging || gameOver || event.button !== 0) return;
+
+             const cellElement = document.elementFromPoint(event.clientX, event.clientY)?.closest('.grid-cell');
+
+             if (cellElement) {
+                const targetRow = parseInt(cellElement.dataset.row);
+                const targetCol = parseInt(cellElement.dataset.col);
+
+                // Attempt to place the piece
+                if (selectedPieceData && canPlacePiece(selectedPieceData, targetRow, targetCol)) {
+                    placePiece(selectedPieceData, targetRow, targetCol); // Updates grid data model
+                    const pieceScore = selectedPieceData.shape.length; // Score for placing piece
+
+                    availablePieces[selectedPieceIndex] = null; // Mark piece as used
+
+                    renderGrid(); // Update visual grid based on data model
+                    let linesCleared = clearCompletedLines(); // Clear lines and get count
+                    let lineScore = calculateLineScore(linesCleared);
+                    addScore(pieceScore + lineScore);
+
+                    // Check if all pieces are used, generate new ones
+                    if (availablePieces.every(p => p === null)) {
+                        generateNewPieces();
+                    }
+                    renderAvailablePieces(); // Update the selection area
+
+                    checkLevelUp();
+                    checkGameOver(); // Check if game should end
+                }
+                // If canPlacePiece is false, placement fails silently (piece just disappears)
+            }
+
+            // Clean up drag state regardless of successful placement
+            stopDragging();
+        }
+
+         // Called when mouseup happens *anywhere else on the page*
+         function handleDocumentMouseUp(event) {
+             if (isDragging && event.target.closest('#game-grid') === null) {
+                  // If dragging and mouseup is outside the grid, cancel the drag
+                  stopDragging();
+             }
+         }
+
+
+        // Utility function to stop dragging and clean up
+        function stopDragging() {
+            if (!isDragging) return;
+            isDragging = false;
+            clearGhostPreview(); // Ensure ghost is removed
+            draggablePieceElement.style.display = 'none'; // Hide draggable element
+
+             // Reset cursor and selection style on the original piece container
+             const originalContainer = selectionElement.querySelector(`.piece-container[data-index="${selectedPieceIndex}"]`);
+             if (originalContainer) {
+                 originalContainer.classList.remove('selected');
+                 originalContainer.style.cursor = 'grab';
+             }
+
+             selectedPieceIndex = -1;
+             selectedPieceData = null;
+
+             // Remove the global mousemove listener
+             document.removeEventListener('mousemove', dragPiece);
+        }
+
+
+        // --- Placement Validation and Execution ---
+        function canPlacePiece(piece, startRow, startCol) {
+            if (!piece) return false;
+            for (const [r_offset, c_offset] of piece.shape) {
+                const r = startRow + r_offset;
+                const c = startCol + c_offset;
+
+                // Check bounds
+                if (r < 0 || r >= GRID_SIZE || c < 0 || c >= GRID_SIZE) {
+                    return false; // Out of bounds
+                }
+                // Check collision
+                if (grid[r][c] !== 0) {
+                    return false; // Cell already occupied
+                }
+            }
+            return true; // Placement is valid
+        }
+
+         // --- Ghost Preview --- (Optimized)
+         function showGhostPreview(piece, startRow, startCol) {
+            if (!piece) return;
+            clearGhostPreview(); // Ensure previous ghost is cleared first
+
+            piece.shape.forEach(([r_offset, c_offset]) => {
+                const r = startRow + r_offset;
+                const c = startCol + c_offset;
+                if (r >= 0 && r < GRID_SIZE && c >= 0 && c < GRID_SIZE) {
+                    // Find the cell element more reliably
+                     const cellElement = gridElement.querySelector(`.grid-cell[data-row="${r}"][data-col="${c}"]`);
+                    if (cellElement && grid[r][c] === 0) { // Only ghost over empty cells
+                        cellElement.classList.add('ghost-cell');
+                        currentGhostCells.push(cellElement); // Store reference
+                    }
+                }
+            });
+         }
+
+         function clearGhostPreview() {
+             // Remove class only from cells currently marked as ghost
+             currentGhostCells.forEach(cell => {
+                 if (cell) { // Check if cell ref is still valid
+                      cell.classList.remove('ghost-cell');
+                 }
+             });
+             currentGhostCells = []; // Clear the tracking array
+         }
+
+
+        function placePiece(piece, startRow, startCol) {
+            // Assumes canPlacePiece was already checked and returned true
+            if (!piece) return;
+            piece.shape.forEach(([r_offset, c_offset]) => {
+                const r = startRow + r_offset;
+                const c = startCol + c_offset;
+                 // No need for bounds check here if canPlacePiece was done
+                grid[r][c] = piece.color; // Store the color class name in the data grid
+            });
+            // Score is added in handleGridMouseUp after placement and line clear
+        }
+
+
+        // --- Grid Rendering ---
+        function renderGrid() {
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const cellElement = gridElement.querySelector(`.grid-cell[data-row="${r}"][data-col="${c}"]`);
+                    if (cellElement) {
+                        // Reset classes carefully
+                         cellElement.className = 'grid-cell'; // Base class
+                        if (grid[r][c] !== 0) {
+                            cellElement.classList.add(grid[r][c], 'block-cell'); // Add current color and block style
+                        }
+                        // Re-apply data attributes just in case className reset removed them (it shouldn't)
+                        cellElement.dataset.row = r;
+                        cellElement.dataset.col = c;
+                    }
+                }
+            }
+        }
+
+        // --- Line Clearing --- (Keep clearCompletedLines as before)
+        function clearCompletedLines() {
+            let linesClearedCount = 0;
+            let rowsToClear = [];
+            let colsToClear = [];
+
+            // Check for completed rows
+            for (let r = 0; r < GRID_SIZE; r++) {
+                if (grid[r].every(cell => cell !== 0)) {
+                    rowsToClear.push(r);
+                }
+            }
+
+            // Check for completed columns
+            for (let c = 0; c < GRID_SIZE; c++) {
+                let colComplete = true;
+                for (let r = 0; r < GRID_SIZE; r++) {
+                    if (grid[r][c] === 0) {
+                        colComplete = false;
+                        break;
+                    }
+                }
+                if (colComplete) {
+                    colsToClear.push(c);
+                }
+            }
+
+             let actualClears = 0; // Count unique lines cleared
+
+             // Helper to mark cells for visual feedback (optional)
+             const cellsToFlash = [];
+
+             // Clear rows and mark cells
+             rowsToClear.forEach(r => {
+                 actualClears++;
+                 for (let c = 0; c < GRID_SIZE; c++) {
+                      if (grid[r][c] !== 0) cellsToFlash.push({ r, c }); // Store cell coords
+                      grid[r][c] = 0;
+                 }
+             });
+
+            // Clear columns and mark cells (avoiding double marks)
+             colsToClear.forEach(c => {
+                 let columnAddedToCount = false;
+                 for (let r = 0; r < GRID_SIZE; r++) {
+                     if (grid[r][c] !== 0) { // If it wasn't already cleared by a row
+                         if (!rowsToClear.includes(r) && !columnAddedToCount) {
+                              actualClears++; // Count this column clear
+                              columnAddedToCount = true;
+                         }
+                         if (grid[r][c] !== 0) cellsToFlash.push({ r, c }); // Store cell coords
+                         grid[r][c] = 0;
+                     }
+                 }
+             });
+
+            // Flash effect could be added here using cellsToFlash before renderGrid
+
+            // Important: Re-render the grid AFTER clearing the data model
+            if (rowsToClear.length > 0 || colsToClear.length > 0) {
+                renderGrid(); // Update display immediately
+            }
+
+            return actualClears; // Return count of unique lines cleared
+        }
+
+
+        // --- Scoring and Levels --- (Keep addScore, updateScoreDisplay, calculateLineScore, checkLevelUp, updateLevelDisplay as before)
+        function addScore(points) {
+            if (points <= 0) return; // Don't add zero or negative score
+            score += points;
+            updateScoreDisplay();
+        }
+
+        function updateScoreDisplay() {
+            scoreElement.textContent = score;
+        }
+
+        function calculateLineScore(linesCleared) {
+             // Bonus score for clearing lines (e.g., 10 points per block in line + bonus per line)
+             if (linesCleared === 0) return 0;
+             let blocksPerLine = GRID_SIZE;
+             let baseScore = linesCleared * blocksPerLine * 10; // 10 points per block cleared this way
+             let bonusScore = linesCleared * linesCleared * 50; // Exponential bonus: 1=50, 2=200, 3=450 etc.
+             return baseScore + bonusScore;
+         }
+
+        function checkLevelUp() {
+             if (score >= currentLevelScoreGoal) {
+                 level++;
+                 currentLevelScoreGoal = calculateLevelGoal(level);
+                 updateLevelDisplay();
+                 // Optional: Add a "Level Up!" message or effect
+                 showMessage(`Level ${level}!`, 1500); // Show briefly
+             }
+        }
+
+        function updateLevelDisplay() {
+             levelElement.textContent = level;
+         }
+
+
+        // --- Game Over --- (Keep checkGameOver, canPlacePieceAnywhere as before)
+        function checkGameOver() {
+             if (gameOver) return; // Don't re-check if already over
+
+             let canPlaceAny = false;
+             for (const piece of availablePieces) {
+                 if (piece === null) continue; // Skip empty slots
+                 if (canPlacePieceAnywhere(piece)) {
+                     canPlaceAny = true;
+                     break; // Found at least one piece that can be placed
+                 }
+             }
+
+             if (!canPlaceAny) {
+                 gameOver = true;
+                 showMessage(`Game Over!<br>Level: ${level}<br>Score: ${score}`, -1); // Show indefinitely until restart
+                 stopDragging(); // Ensure drag state is cleaned up if game ends mid-drag
+             }
+        }
+
+        function canPlacePieceAnywhere(piece) {
+            if (!piece) return false;
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    if (canPlacePiece(piece, r, c)) {
+                        return true; // Found a valid spot
+                    }
+                }
+            }
+            return false; // No valid spot found on the entire grid
+        }
+
+        // --- Messages --- (Keep showMessage, hideMessage as before)
+        function showMessage(text, durationMs = -1) {
+            messageText.innerHTML = text; // Use innerHTML to allow line breaks
+            messageArea.style.display = 'block';
+            restartButton.style.display = (durationMs === -1 && gameOver) ? 'block' : 'none'; // Show button only on final game over
+
+            if (durationMs > 0) {
+                setTimeout(hideMessage, durationMs);
+            }
+         }
+
+         function hideMessage() {
+             messageArea.style.display = 'none';
+         }
+
+        // --- Event Listeners ---
+         restartButton.addEventListener('click', initGame);
+         // Other listeners are added dynamically in createGrid and startDragPiece
+
+        // --- Start Game ---
+        document.addEventListener('DOMContentLoaded', initGame);
+
+    </script>
+</body>
+</html>
